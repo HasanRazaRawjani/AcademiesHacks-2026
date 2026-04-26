@@ -1,5 +1,8 @@
+using Unity.Collections;
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.UI; 
+using TMPro;           
 
 public class Enemy_AI : MonoBehaviour
 {
@@ -9,6 +12,19 @@ public class Enemy_AI : MonoBehaviour
     private NavMeshAgent Agent;
     private GameObject enemySight;
 
+    [Header("Health & UI Settings")]
+    public float maxHealth = 100f;
+    private float currentHealth;
+    public Image healthFillImage;      
+    public TextMeshProUGUI healthText; 
+
+    [Header("Split Settings")]
+    public int generation = 0; 
+    public int maxGenerations = 2; 
+    public float splitOffset = 1.5f; 
+    public GameObject deathSplitEffect; 
+    private bool isDead = false; 
+
     [Header("State Machine Settings")]
     public float stomp_Distance = 3f; 
     public float Punch_Distance = 3f; 
@@ -16,21 +32,34 @@ public class Enemy_AI : MonoBehaviour
     public float visionRange = 20f;   
 
     [Header("Cooldown & Timing")]
-    public float attackCooldown = 2f;    // Time spent walking before next attack
-    public float animationDuration = 1.5f; // Duration to let the animation play (freeze movement)
+    public float attackCooldown = 2f;    
+    public float animationDuration = 1.5f; 
     
     private float cooldownTimer = 0f;
     private float lockoutTimer = 0f;
 
     [Header("Attack Effects")]
+    public float DestroyTime = 1f;
     public GameObject stompEffect;
     private GameObject stompPOS;
     public GameObject punchEffect;
     private GameObject punchPOS;
     public GameObject throwProjectile;
+    public GameObject rockSpawnPos;
+    private GameObject x;
+    private GameObject y;
+    private GameObject z;
+
+    [Header("Rock Throw Settings")]
+    public float rockThrowSpeed = 17f; 
+    private GameObject currentRock; 
 
     void Start()
     {
+        isDead = false;
+        currentHealth = maxHealth;
+        UpdateUI();
+
         stompPOS = gameObject.transform.Find("DustExplosionPos").gameObject;
         punchPOS = gameObject.transform.Find("EarthShatterPos").gameObject;
         enemySight = gameObject.transform.Find("Golem_Model").transform.Find("Enemy_Vision").gameObject;
@@ -38,45 +67,51 @@ public class Enemy_AI : MonoBehaviour
         player_Controller = player.GetComponent<Player_Controller>();
         Agent = gameObject.GetComponent<NavMeshAgent>();
         animator = gameObject.transform.Find("Golem_Model").GetComponent<Animator>();
+
+        if (generation > 0)
+        {
+            lockoutTimer = 1f;
+            cooldownTimer = attackCooldown;
+        }
     }
 
     void Update()
     {
-        // 1. Handle Cooldown (The walking delay)
+        if (Input.GetKeyUp(KeyCode.P))
+        {
+            TakeDamage(100);
+        }
+        if (currentHealth <= 0 || isDead) return;
+
+        gameObject.transform.LookAt(player.transform);
+        
         if (cooldownTimer > 0)
         {
             cooldownTimer -= Time.deltaTime;
         }
 
-        // 2. Handle Lockout (The animation freeze)
         if (lockoutTimer > 0)
         {
             lockoutTimer -= Time.deltaTime;
             Agent.isStopped = true;
             animator.SetBool("Moving", false);
-            // We return here so NO movement logic runs until the animation is "done"
             return; 
         }
 
         float distanceToPlayer = Vector3.Distance(transform.position, player.transform.position);
 
-        // 3. Attack Logic
-        // Punch - Spam allowed, but we still lock the animation for its duration
         if (distanceToPlayer <= Punch_Distance && CanSeePlayer())
         {
             TriggerAttack("Punch", animationDuration, false);
         }
-        // Stomp
         else if (distanceToPlayer <= stomp_Distance && CanSeePlayer() && cooldownTimer <= 0)
         {
             TriggerAttack("Stomp_Attack", animationDuration, true);
         }
-        // Throw
         else if (distanceToPlayer <= Throw_Distance && CanSeePlayer() && cooldownTimer <= 0)
         {
             TriggerAttack("Throw_Rock", animationDuration, true);
         }
-        // 4. Chase State
         else
         {
             Agent.isStopped = false;
@@ -85,7 +120,98 @@ public class Enemy_AI : MonoBehaviour
         }
     }
 
-    // Helper to keep the code clean
+
+    public void TakeDamage(float damage)
+    {
+        if (currentHealth <= 0 || isDead) return;
+
+        currentHealth -= damage;
+        currentHealth = Mathf.Clamp(currentHealth, 0, maxHealth);
+        UpdateUI();
+
+        if (currentHealth <= 0)
+        {
+            Die();
+        }
+    }
+
+    private void UpdateUI()
+    {
+        if (healthFillImage != null)
+        {
+            healthFillImage.fillAmount = currentHealth / maxHealth;
+        }
+
+        if (healthText != null)
+        {
+            healthText.text = ((currentHealth / maxHealth) * 100).ToString("F0") + "%";
+        }
+    }
+
+    public void Die()
+    {
+        if (isDead) return;
+        isDead = true;
+
+        Debug.Log("Enemy Generation " + generation + " Dead");
+        
+        if (Agent != null && Agent.isActiveAndEnabled)
+        {
+            Agent.isStopped = true;
+        }
+        
+        animator.SetBool("Moving", false);
+        animator.SetTrigger("Die");
+
+        if (deathSplitEffect != null)
+        {
+            GameObject fx = Instantiate(deathSplitEffect, transform.position, transform.rotation);
+            Destroy(fx, 3f);
+        }
+
+        if (generation < maxGenerations)
+        {
+            SpawnSplits();
+        }
+
+        Destroy(gameObject, 3f);
+    }
+
+    private void SpawnSplits()
+    {
+        Vector3 spawnLeft = transform.position + (transform.right * -splitOffset);
+        Vector3 spawnRight = transform.position + (transform.right * splitOffset);
+
+        CreateSplitClone(spawnLeft);
+        CreateSplitClone(spawnRight);
+    }
+
+    private void CreateSplitClone(Vector3 spawnPos)
+    {
+        GameObject clone = Instantiate(gameObject, spawnPos, transform.rotation);
+        Enemy_AI cloneScript = clone.GetComponent<Enemy_AI>();
+
+        cloneScript.generation = this.generation + 1;
+        cloneScript.maxHealth = this.maxHealth * 0.5f;
+
+        clone.transform.localScale = transform.localScale * 0.5f;
+
+        Animator cloneAnimator = clone.transform.Find("Golem_Model").GetComponent<Animator>();
+        if (cloneAnimator != null)
+        {
+            cloneAnimator.Rebind();
+            cloneAnimator.Update(0f);
+        }
+
+        NavMeshAgent cloneAgent = clone.GetComponent<NavMeshAgent>();
+        if (cloneAgent != null)
+        {
+            cloneAgent.radius *= 0.5f;
+            cloneAgent.height *= 0.5f;
+        }
+    }
+
+
     void TriggerAttack(string triggerName, float duration, bool applyCooldown)
     {
         Agent.isStopped = true;
@@ -93,10 +219,10 @@ public class Enemy_AI : MonoBehaviour
         animator.SetBool("Moving", false);
         animator.SetTrigger(triggerName);
 
-        lockoutTimer = duration; // Freeze the AI for the duration of the clip
+        lockoutTimer = duration; 
         if (applyCooldown)
         {
-            cooldownTimer = attackCooldown; // Start the walk-back-at-player delay
+            cooldownTimer = attackCooldown; 
         }
     }
 
@@ -135,23 +261,47 @@ public class Enemy_AI : MonoBehaviour
 
     public void Punch_Attack()
     {
-        Debug.Log("Punch");
-
+        x = GameObject.Instantiate(punchEffect, punchPOS.transform.position, punchPOS.transform.rotation);
+        x.transform.SetParent(punchPOS.transform);
+        Destroy(x, DestroyTime);
+        player_Controller.takeDamage(5);
     }
 
     public void Stomp_Attack()
     {
-        Debug.Log("Stomp");
-    }
-
-    public void Throw_Attack()
-    {
-        Debug.Log("Throw");
+        y = GameObject.Instantiate(stompEffect, stompPOS.transform.position, stompPOS.transform.rotation);
+        y.transform.SetParent(stompPOS.transform);
+        Destroy(y, DestroyTime);
+        player_Controller.takeDamage(3);
     }
 
     public void Throw_Attack_Spawn()
     {
-        
+        currentRock = GameObject.Instantiate(throwProjectile, rockSpawnPos.transform.position, rockSpawnPos.transform.rotation);
+        currentRock.transform.SetParent(rockSpawnPos.transform);
     }
 
+    public void Throw_Attack()
+    {
+        if (currentRock == null) return;
+
+        currentRock.transform.SetParent(null);
+        Rigidbody rb = currentRock.AddComponent<Rigidbody>();
+        rb.interpolation = RigidbodyInterpolation.Interpolate;
+        rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
+
+        RockProjectile projectileScript = currentRock.GetComponent<RockProjectile>();
+        if (projectileScript == null) 
+        {
+            projectileScript = currentRock.AddComponent<RockProjectile>();
+        }
+        projectileScript.damage = 10; 
+
+        Vector3 targetPos = player.transform.position + Vector3.up * 1.5f;
+        Vector3 throwDirection = (targetPos - currentRock.transform.position).normalized;
+
+        rb.linearVelocity = throwDirection * rockThrowSpeed;
+
+        Destroy(currentRock, 5f);
+    }
 }
