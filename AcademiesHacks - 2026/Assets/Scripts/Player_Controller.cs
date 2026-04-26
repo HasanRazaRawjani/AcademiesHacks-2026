@@ -6,6 +6,8 @@ using UnityEngine.UI;
 [RequireComponent(typeof(Rigidbody))]
 public class Player_Controller : MonoBehaviour
 {
+    public AudioSource playerWalkSFX;
+    public AudioSource playerJumpSFX;
     [Header("Movement Settings")]
     public float moveSpeed = 7f;
     public float jumpForce = 5f;
@@ -50,7 +52,19 @@ public class Player_Controller : MonoBehaviour
 
     void Update()
     {
-        // 1. UI UPDATES (Health & Stamina)
+
+        float moveHorizontal = Input.GetAxis("Horizontal");
+        float moveVertical = Input.GetAxis("Vertical");
+
+        if (moveHorizontal != 0 || moveVertical != 0)
+        {
+            if (!playerWalkSFX.isPlaying) playerWalkSFX.Play();
+        }
+        else
+        {
+            playerWalkSFX.Stop();
+        }
+
         currentHealthAmount = Mathf.Clamp(currentHealthAmount, 0, maxHealthAmount);
         healthImage.fillAmount = currentHealthAmount / maxHealthAmount;
         healthText.text = "Health : " + Mathf.RoundToInt(currentHealthAmount) + "%";
@@ -59,7 +73,6 @@ public class Player_Controller : MonoBehaviour
         sprintImage.fillAmount = currentSprintAmount / maxSprintAmount;
         sprintText.text = "Stamina : " + Mathf.RoundToInt((currentSprintAmount / maxSprintAmount) * 100) + "%";
 
-        // 2. MOUSE LOOK
         float mouseX = Input.GetAxis("Mouse X") * lookSensitivity;
         float mouseY = Input.GetAxis("Mouse Y") * lookSensitivity;
 
@@ -68,7 +81,6 @@ public class Player_Controller : MonoBehaviour
         xRotation = Mathf.Clamp(xRotation, -90f, 90f);
         playerCamera.localRotation = Quaternion.Euler(xRotation, 0f, 0f);
 
-        // 3. SPRINT LOGIC
         float moveX = Input.GetAxisRaw("Horizontal");
         float moveZ = Input.GetAxisRaw("Vertical");
 
@@ -84,20 +96,18 @@ public class Player_Controller : MonoBehaviour
                 currentSprintAmount += sprintRegenRate * Time.deltaTime;
         }
 
-        // 4. MOVEMENT
         Vector3 moveDirection = (transform.forward * moveZ + transform.right * moveX).normalized;
         Vector3 currentVelocity = rb.linearVelocity;
         Vector3 targetMoveVelocity = moveDirection * moveSpeed;
         rb.linearVelocity = new Vector3(targetMoveVelocity.x, currentVelocity.y, targetMoveVelocity.z);
 
-        // 5. JUMPING
         if (Input.GetButtonDown("Jump") && isGrounded)
         {
+            if (!playerJumpSFX.isPlaying) playerJumpSFX.Play();
             rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
             isGrounded = false;
         }
 
-        // 6. DEATH CHECK
         if (currentHealthAmount <= 0)
         {
             Die();

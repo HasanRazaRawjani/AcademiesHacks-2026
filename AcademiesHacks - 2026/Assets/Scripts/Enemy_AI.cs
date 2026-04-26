@@ -2,10 +2,19 @@ using Unity.Collections;
 using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.UI; 
-using TMPro;           
+using TMPro;
 
 public class Enemy_AI : MonoBehaviour
 {
+    [Header("Sound")]
+    public AudioSource enemyWalk;
+    public AudioSource RoarAudio;
+    public AudioSource JumpSFX;
+    public AudioSource PunchSFX;
+    public AudioSource ThrowSFX;
+    public AudioSource EnemyDmgSFX;
+    public AudioSource EnemyDeathSFX;
+
     private Animator animator;
     private Player_Controller player_Controller;
     private GameObject player;
@@ -24,6 +33,10 @@ public class Enemy_AI : MonoBehaviour
     public float splitOffset = 1.5f; 
     public GameObject deathSplitEffect; 
     private bool isDead = false; 
+
+    [Header("Timing & Immunity")]
+    public float startupDelay = 3f; // Time they stay still and are invincible
+    private float startupTimer;
 
     [Header("State Machine Settings")]
     public float stomp_Distance = 3f; 
@@ -60,6 +73,9 @@ public class Enemy_AI : MonoBehaviour
         currentHealth = maxHealth;
         UpdateUI();
 
+        // Initialize timers
+        startupTimer = startupDelay;
+
         stompPOS = gameObject.transform.Find("DustExplosionPos").gameObject;
         punchPOS = gameObject.transform.Find("EarthShatterPos").gameObject;
         enemySight = gameObject.transform.Find("Golem_Model").transform.Find("Enemy_Vision").gameObject;
@@ -68,19 +84,50 @@ public class Enemy_AI : MonoBehaviour
         Agent = gameObject.GetComponent<NavMeshAgent>();
         animator = gameObject.transform.Find("Golem_Model").GetComponent<Animator>();
 
+        if (!RoarAudio.isPlaying)
+        {
+            RoarAudio.Play();
+        }
+
+        // If it's a clone, we reset the lockout and cooldown
         if (generation > 0)
         {
-            lockoutTimer = 1f;
+            lockoutTimer = 0f; 
             cooldownTimer = attackCooldown;
         }
     }
 
     void Update()
     {
+
+        if (Agent.velocity.magnitude > 0.1f && !Agent.isStopped)
+        {
+            if (!enemyWalk.isPlaying) 
+            {
+                enemyWalk.Play();
+            }
+        }
+        else
+        {
+            enemyWalk.Stop();
+        }
+
+        // 1. Handle Startup Delay (Movement Freeze & Invincibility)
+        if (startupTimer > 0)
+        {
+            startupTimer -= Time.deltaTime;
+            Agent.isStopped = true;
+            animator.SetBool("Moving", false);
+            return; // Exit Update so AI doesn't think or move
+        }
+
+        // --- Normal AI Logic Starts Here ---
+
         if (Input.GetKeyUp(KeyCode.P))
         {
-            TakeDamage(100);
+            TakeDamage(50);     
         }
+
         if (currentHealth <= 0 || isDead) return;
 
         gameObject.transform.LookAt(player.transform);
@@ -120,12 +167,18 @@ public class Enemy_AI : MonoBehaviour
         }
     }
 
-
     public void TakeDamage(float damage)
     {
         if (currentHealth <= 0 || isDead) return;
 
+        // NEW: Damage Immunity during startup
+        if (startupTimer > 0) return;
+
         currentHealth -= damage;
+        if (!EnemyDmgSFX.isPlaying)
+        {
+            EnemyDmgSFX.Play();
+        }
         currentHealth = Mathf.Clamp(currentHealth, 0, maxHealth);
         UpdateUI();
 
@@ -162,6 +215,11 @@ public class Enemy_AI : MonoBehaviour
         
         animator.SetBool("Moving", false);
         animator.SetTrigger("Die");
+        
+        if (EnemyDeathSFX != null)
+        {
+            EnemyDeathSFX.Play();
+        }
 
         if (deathSplitEffect != null)
         {
@@ -193,7 +251,6 @@ public class Enemy_AI : MonoBehaviour
 
         cloneScript.generation = this.generation + 1;
         cloneScript.maxHealth = this.maxHealth * 0.5f;
-
         clone.transform.localScale = transform.localScale * 0.5f;
 
         Animator cloneAnimator = clone.transform.Find("Golem_Model").GetComponent<Animator>();
@@ -210,7 +267,6 @@ public class Enemy_AI : MonoBehaviour
             cloneAgent.height *= 0.5f;
         }
     }
-
 
     void TriggerAttack(string triggerName, float duration, bool applyCooldown)
     {
@@ -263,6 +319,7 @@ public class Enemy_AI : MonoBehaviour
     {
         x = GameObject.Instantiate(punchEffect, punchPOS.transform.position, punchPOS.transform.rotation);
         x.transform.SetParent(punchPOS.transform);
+        if (PunchSFX != null) PunchSFX.Play();
         Destroy(x, DestroyTime);
         player_Controller.takeDamage(5);
     }
@@ -271,12 +328,14 @@ public class Enemy_AI : MonoBehaviour
     {
         y = GameObject.Instantiate(stompEffect, stompPOS.transform.position, stompPOS.transform.rotation);
         y.transform.SetParent(stompPOS.transform);
+        if (JumpSFX != null) JumpSFX.Play();
         Destroy(y, DestroyTime);
         player_Controller.takeDamage(3);
     }
 
     public void Throw_Attack_Spawn()
     {
+        if (ThrowSFX != null) ThrowSFX.Play();
         currentRock = GameObject.Instantiate(throwProjectile, rockSpawnPos.transform.position, rockSpawnPos.transform.rotation);
         currentRock.transform.SetParent(rockSpawnPos.transform);
     }
