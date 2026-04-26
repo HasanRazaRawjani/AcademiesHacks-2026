@@ -8,6 +8,7 @@ using UnityEngine.SceneManagement;
 
 public class Enemy_AI : MonoBehaviour
 {
+    public static int TotalEnemiesAlive = 0;
     [Header("Sound")]
     public AudioSource enemyWalk;
     public AudioSource RoarAudio;
@@ -71,6 +72,7 @@ public class Enemy_AI : MonoBehaviour
 
     void Start()
     {
+        TotalEnemiesAlive++;
         isDead = false;
         currentHealth = maxHealth;
         UpdateUI();
@@ -203,43 +205,43 @@ public class Enemy_AI : MonoBehaviour
 
     public void Die()
     {
-        if (isDead) return;
-        isDead = true;
+    if (isDead) return;
+    isDead = true;
 
-        if (Agent != null && Agent.isActiveAndEnabled)
-        {
-            Agent.isStopped = true;
-        }
+    TotalEnemiesAlive--;
+
+    if (Agent != null && Agent.isActiveAndEnabled) Agent.isStopped = true;
+    animator.SetBool("Moving", false);
+    animator.SetTrigger("Die");
+    
+    if (EnemyDeathSFX != null) EnemyDeathSFX.Play();
+
+    if (generation < maxGenerations)
+    {
+        SpawnSplits();
+    }
+    else
+    {
         
-        animator.SetBool("Moving", false);
-        animator.SetTrigger("Die");
-        
-        if (EnemyDeathSFX != null) EnemyDeathSFX.Play();
-
-        if (deathSplitEffect != null)
+        if (TotalEnemiesAlive <= 0)
         {
-            GameObject fx = Instantiate(deathSplitEffect, transform.position, transform.rotation);
-            Destroy(fx, 3f);
+            CompleteProtocol();
         }
-
-        if (generation < maxGenerations)
-        {
-            SpawnSplits();
-        }
-        else
-        {
-            
-            Invoke("CheckForRemainingEnemies", 3.1f); 
-        }
-
-        Destroy(gameObject, 3f);
     }
 
+    if (deathSplitEffect != null)
+    {
+        GameObject fx = Instantiate(deathSplitEffect, transform.position, transform.rotation);
+        Destroy(fx, 3f);
+    }
+
+    Destroy(gameObject, 3f);
+}
     private void CheckForRemainingEnemies()
     {
         
         Enemy_AI[] remainingEnemies = GameObject.FindObjectsByType<Enemy_AI>(FindObjectsInactive.Exclude);
-        
+        Debug.Log(remainingEnemies.Length);
         if (remainingEnemies.Length <= 1)
         {
             CompleteProtocol();
@@ -248,6 +250,7 @@ public class Enemy_AI : MonoBehaviour
 
     public void CompleteProtocol()
     {
+        TotalEnemiesAlive = 0;
         SceneManager.LoadScene("The End 1");
     }
     private void SpawnSplits()
