@@ -2,6 +2,7 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 
 [RequireComponent(typeof(Rigidbody))]
 public class Player_Controller : MonoBehaviour
@@ -122,6 +123,7 @@ public class Player_Controller : MonoBehaviour
     void Die()
     {
         Destroy(this.gameObject);
+        SceneManager.LoadScene("The End");
     }
 
     private void OnCollisionStay(Collision collision)

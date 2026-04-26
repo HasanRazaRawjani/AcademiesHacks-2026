@@ -3,6 +3,8 @@ using UnityEngine;
 using UnityEngine.AI;
 using UnityEngine.UI; 
 using TMPro;
+using UnityEngine.SceneManagement;
+
 
 public class Enemy_AI : MonoBehaviour
 {
@@ -35,7 +37,7 @@ public class Enemy_AI : MonoBehaviour
     private bool isDead = false; 
 
     [Header("Timing & Immunity")]
-    public float startupDelay = 3f; // Time they stay still and are invincible
+    public float startupDelay = 3f;
     private float startupTimer;
 
     [Header("State Machine Settings")]
@@ -73,7 +75,6 @@ public class Enemy_AI : MonoBehaviour
         currentHealth = maxHealth;
         UpdateUI();
 
-        // Initialize timers
         startupTimer = startupDelay;
 
         stompPOS = gameObject.transform.Find("DustExplosionPos").gameObject;
@@ -89,7 +90,6 @@ public class Enemy_AI : MonoBehaviour
             RoarAudio.Play();
         }
 
-        // If it's a clone, we reset the lockout and cooldown
         if (generation > 0)
         {
             lockoutTimer = 0f; 
@@ -112,16 +112,16 @@ public class Enemy_AI : MonoBehaviour
             enemyWalk.Stop();
         }
 
-        // 1. Handle Startup Delay (Movement Freeze & Invincibility)
+
         if (startupTimer > 0)
         {
             startupTimer -= Time.deltaTime;
             Agent.isStopped = true;
             animator.SetBool("Moving", false);
-            return; // Exit Update so AI doesn't think or move
+            return; 
         }
 
-        // --- Normal AI Logic Starts Here ---
+
 
         if (Input.GetKeyUp(KeyCode.P))
         {
@@ -171,7 +171,7 @@ public class Enemy_AI : MonoBehaviour
     {
         if (currentHealth <= 0 || isDead) return;
 
-        // NEW: Damage Immunity during startup
+
         if (startupTimer > 0) return;
 
         currentHealth -= damage;
@@ -206,8 +206,6 @@ public class Enemy_AI : MonoBehaviour
         if (isDead) return;
         isDead = true;
 
-        Debug.Log("Enemy Generation " + generation + " Dead");
-        
         if (Agent != null && Agent.isActiveAndEnabled)
         {
             Agent.isStopped = true;
@@ -216,10 +214,7 @@ public class Enemy_AI : MonoBehaviour
         animator.SetBool("Moving", false);
         animator.SetTrigger("Die");
         
-        if (EnemyDeathSFX != null)
-        {
-            EnemyDeathSFX.Play();
-        }
+        if (EnemyDeathSFX != null) EnemyDeathSFX.Play();
 
         if (deathSplitEffect != null)
         {
@@ -231,10 +226,30 @@ public class Enemy_AI : MonoBehaviour
         {
             SpawnSplits();
         }
+        else
+        {
+            
+            Invoke("CheckForRemainingEnemies", 3.1f); 
+        }
 
         Destroy(gameObject, 3f);
     }
 
+    private void CheckForRemainingEnemies()
+    {
+        
+        Enemy_AI[] remainingEnemies = GameObject.FindObjectsByType<Enemy_AI>(FindObjectsInactive.Exclude);
+        
+        if (remainingEnemies.Length <= 1)
+        {
+            CompleteProtocol();
+        }
+    }
+
+    public void CompleteProtocol()
+    {
+        SceneManager.LoadScene("The End 1");
+    }
     private void SpawnSplits()
     {
         Vector3 spawnLeft = transform.position + (transform.right * -splitOffset);
